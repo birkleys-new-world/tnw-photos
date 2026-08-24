@@ -241,7 +241,7 @@ export default function OwnerPage() {
                   src={p.thumbUrl}
                   alt={p.name}
                   onClick={() => setLightbox(idx)}
-                  className="aspect-square w-full cursor-pointer object-cover"
+                  className="h-56 w-full cursor-pointer object-contain"
                 />
                 <div className="p-2">
                   <div className="truncate text-xs text-neutral-400" title={p.name}>

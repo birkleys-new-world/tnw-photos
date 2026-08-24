@@ -1,13 +1,8 @@
 // Client-side thumbnail generation + ingestion helpers (runs in the browser).
 
-// Broad set of photo extensions we accept on ingest. Browser can only *decode*
-// a subset (jpeg/png/webp/gif/avif + heic/heif on Safari); everything else
-// (RAW, tiff, bmp) gets a real thumbnail from its EMBEDDED PREVIEW (Canon CR2
-// and most RAWs embed a JPEG preview), decoded client-side — no raw codec needed.
 export const PHOTO_EXTS = [
   "jpg", "jpeg", "png", "webp", "gif", "heic", "heif", "avif", "bmp",
   "tif", "tiff",
-  // RAW formats
   "cr2", "cr3", "crw", "nef", "nrw", "arw", "srf", "sr2", "dng", "raf",
   "rw2", "rwl", "orf", "pef", "srw", "raw", "mrw", "3fr", "fff", "dcr",
   "k25", "kdc", "x3f", "mdc", "mos", "erf", "iiq", "cap", "dcs", "drf",
@@ -34,17 +29,40 @@ export function isRaw(name: string): boolean {
   return RAW_EXTS.has(extOf(name));
 }
 
-function drawScaled(img: HTMLImageElement, max = 480): { dataUrl: string; width: number; height: number } {
-  const scale = Math.min(1, max / Math.max(img.width, img.height));
-  const w = Math.max(1, Math.round(img.width * scale));
-  const h = Math.max(1, Math.round(img.height * scale));
+// Draw |img| (ImageBitmap or HTMLImageElement) into a canvas, applying EXIF
+// orientation (1-8) so rotated photos display upright. Returns the canvas.
+function makeOrientedCanvas(img: { width: number; height: number }, orientation: number, max: number): HTMLCanvasElement {
+  const iw = img.width, ih = img.height;
+  const scale = Math.min(1, max / Math.max(iw, ih));
+  const sw = Math.max(1, Math.round(iw * scale));
+  const sh = Math.max(1, Math.round(ih * scale));
+  const swapped = orientation >= 5 && orientation <= 8;
+  const cw = swapped ? sh : sw;
+  const ch = swapped ? sw : sh;
+
   const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("no 2d");
-  ctx.drawImage(img, 0, 0, w, h);
-  return { dataUrl: canvas.toDataURL("image/jpeg", 0.7), width: w, height: h };
+  canvas.width = cw;
+  canvas.height = ch;
+  const ctx = canvas.getContext("2d")!;
+  ctx.save();
+  ctx.translate(cw / 2, ch / 2);
+  switch (orientation) {
+    case 2: ctx.scale(-1, 1); break;
+    case 3: ctx.rotate(Math.PI); break;
+    case 4: ctx.scale(1, -1); break;
+    case 5: ctx.rotate(-Math.PI / 2); ctx.scale(-1, 1); break;
+    case 6: ctx.rotate(Math.PI / 2); break;
+    case 7: ctx.rotate(Math.PI / 2); ctx.scale(-1, 1); break;
+    case 8: ctx.rotate(-Math.PI / 2); break;
+    default: break; // 1
+  }
+  ctx.drawImage(img as CanvasImageSource, -sw / 2, -sh / 2, sw, sh);
+  ctx.restore();
+  return canvas;
+}
+
+function toThumb(canvas: HTMLCanvasElement): { dataUrl: string; width: number; height: number } {
+  return { dataUrl: canvas.toDataURL("image/jpeg", 0.8), width: canvas.width, height: canvas.height };
 }
 
 function loadImageFromBytes(bytes: ArrayBuffer): Promise<HTMLImageElement> {
@@ -58,45 +76,51 @@ function loadImageFromBytes(bytes: ArrayBuffer): Promise<HTMLImageElement> {
   });
 }
 
-// Scan a buffer for the first embedded JPEG (FFD8...FFD9). Many RAW files embed
-// a full JPEG preview; CR2 also has a smaller IFD-based preview. Returns the JPEG
-// bytes or null if none found.
+// Scan a buffer for the first embedded JPEG (FFD8...FFD9).
 function scanEmbeddedJpeg(buf: ArrayBuffer): ArrayBuffer | null {
   const dv = new DataView(buf);
   const bytes = new Uint8Array(buf);
   const len = bytes.length;
   for (let i = 0; i < len - 1; i++) {
     if (dv.getUint16(i) === 0xffd8) {
-      // find the closing FF D9 from here
       for (let j = i + 2; j < len - 1; j++) {
-        if (dv.getUint16(j) === 0xffd9) {
-          return buf.slice(i, j + 2);
-        }
+        if (dv.getUint16(j) === 0xffd9) return buf.slice(i, j + 2);
       }
-      // first FFD8 with no clean closing marker -> bail this start
       break;
     }
   }
   return null;
 }
 
-async function extractRawPreview(file: File): Promise<{ dataUrl: string; width: number; height: number } | null> {
-  const buf = await file.arrayBuffer();
-  // 1) exifr: pulls the proper preview (largest embedded JPEG for most formats)
+async function readOrientation(buf: ArrayBuffer): Promise<number> {
   try {
     const exifr = await import("exifr");
-    const preview = await (exifr as any).preview(buf, { maxres: 1024 });
+    const o = await (exifr as any).orientation(buf);
+    return typeof o === "number" && o >= 1 && o <= 8 ? o : 1;
+  } catch {
+    return 1;
+  }
+}
+
+async function extractRawPreview(file: File, max: number): Promise<{ dataUrl: string; width: number; height: number } | null> {
+  const buf = await file.arrayBuffer();
+  const exifr = await import("exifr");
+  // 1) proper embedded preview via exifr (largest up to maxres)
+  try {
+    const preview = await (exifr as any).preview(buf, { maxres: 2000 });
     if (preview && preview.file) {
+      const orient = await readOrientation(preview.file);
       const img = await loadImageFromBytes(preview.file);
-      return drawScaled(img, 480);
+      return toThumb(makeOrientedCanvas(img, orient, max));
     }
   } catch (_) { /* fall through */ }
   // 2) byte-scan fallback: first embedded JPEG in the file
   try {
     const jpeg = scanEmbeddedJpeg(buf);
     if (jpeg) {
+      const orient = await readOrientation(jpeg);
       const img = await loadImageFromBytes(jpeg);
-      return drawScaled(img, 480);
+      return toThumb(makeOrientedCanvas(img, orient, max));
     }
   } catch (_) { /* fall through */ }
   return null;
@@ -105,8 +129,7 @@ async function extractRawPreview(file: File): Promise<{ dataUrl: string; width: 
 function placeholderThumb(name: string): { dataUrl: string; width: number; height: number } {
   const c = document.createElement("canvas");
   c.width = 480; c.height = 480;
-  const ctx = c.getContext("2d");
-  if (!ctx) return { dataUrl: "", width: 480, height: 480 };
+  const ctx = c.getContext("2d")!;
   ctx.fillStyle = "#1c1c24"; ctx.fillRect(0, 0, 480, 480);
   ctx.fillStyle = "#34343f"; ctx.beginPath(); ctx.arc(240, 195, 72, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = "#5b5b6b"; ctx.font = "bold 38px sans-serif"; ctx.textAlign = "center";
@@ -118,29 +141,26 @@ function placeholderThumb(name: string): { dataUrl: string; width: number; heigh
   return { dataUrl: c.toDataURL("image/png"), width: 480, height: 480 };
 }
 
-export function makeThumb(file: File, max = 480): Promise<{ dataUrl: string; width: number; height: number }> {
-  // RAW / undecodable: extract embedded preview JPEG, never just a placeholder.
+export function makeThumb(file: File, max = 1000): Promise<{ dataUrl: string; width: number; height: number }> {
   if (isRaw(file.name)) {
-    return extractRawPreview(file).then((r) => (r ? r : placeholderThumb(file.name)));
+    return extractRawPreview(file, max).then((r) => (r ? r : placeholderThumb(file.name)));
   }
 
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    let done = false;
-    const finish = (result: { dataUrl: string; width: number; height: number }) => {
-      if (done) return; done = true; URL.revokeObjectURL(url); resolve(result);
-    };
-    const fail = () => finish(placeholderThumb(file.name));
-    img.onload = () => {
-      try { finish(drawScaled(img, max)); } catch { fail(); }
-    };
-    img.onerror = () => fail();
-    img.src = url;
-  });
+  // Browser-decodable: let createImageBitmap apply EXIF orientation natively,
+  // then draw at target size. Fall back to Image() + manual orientation.
+  return (async () => {
+    try {
+      const bmp = await createImageBitmap(file, { imageOrientation: "from-image" } as ImageBitmapOptions);
+      return toThumb(makeOrientedCanvas(bmp, 1, max));
+    } catch (_) {
+      const buf = await file.arrayBuffer();
+      const orient = await readOrientation(buf);
+      const img = await loadImageFromBytes(buf);
+      return toThumb(makeOrientedCanvas(img, orient, max));
+    }
+  })();
 }
 
-// Short stable id for a photo within a gallery.
 export function photoId(galleryId: string, name: string): string {
   let h = 2166136261;
   const s = galleryId + "|" + name;
