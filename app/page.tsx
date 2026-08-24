@@ -63,6 +63,8 @@ export default function OwnerPage() {
         createdAt: Date.now(),
         photoCount: files.length,
         mode: "raw",
+        ready: [],
+        syncedAt: 0,
       };
       await setDoc(doc(db, "galleries", galleryId), { ...gallery, _created: serverTimestamp() });
 
@@ -190,11 +192,11 @@ export default function OwnerPage() {
               <span className="font-medium">{active.name}</span>
               <a
                 className="rounded bg-sky-700 px-3 py-1 text-sky-50"
-                href={`/s/${active.token}`}
+                href={`/sync`}
                 target="_blank"
                 rel="noreferrer"
               >
-                Open share link ↗
+                Sync folder ↗
               </a>
               <button
                 className="rounded bg-neutral-700 px-3 py-1"

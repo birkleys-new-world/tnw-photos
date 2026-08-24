@@ -13,6 +13,7 @@ import {
 } from "@/lib/firebase";
 import { isConfigured } from "@/lib/firebase";
 import { newGuestId } from "@/lib/thumb";
+import { fullResUrl } from "@/lib/storage";
 import type { Gallery, Photo } from "@/lib/types";
 
 type Choice = "want_edit" | "pass" | "send_raw" | "want_full";
@@ -27,6 +28,7 @@ export default function SwipePage() {
   const [idx, setIdx] = useState(0);
   const [decided, setDecided] = useState<Record<string, Choice>>({});
   const [guestId, setGuestId] = useState<string>("");
+  const [status, setStatus] = useState<string>("");
   const cardRef = useRef<HTMLDivElement>(null);
   const start = useRef<{ x: number; y: number } | null>(null);
 
@@ -59,6 +61,21 @@ export default function SwipePage() {
       setState("ready");
     })().catch(() => setState("missing"));
   }, [token]);
+
+  async function downloadFullRes(p: Photo) {
+    if (!gallery) return;
+    try {
+      setStatus("Preparing your download…");
+      const url = await fullResUrl(gallery.token, p.id);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = p.name;
+      a.click();
+      setStatus("Download started.");
+    } catch {
+      setStatus("Full-res not available yet — owner hasn't synced this photo.");
+    }
+  }
 
   async function vote(choice: Choice) {
     const p = photos[idx];
@@ -155,6 +172,18 @@ export default function SwipePage() {
           </div>
         )}
       </div>
+
+      {(gallery?.ready || []).includes(p.id) && (
+        <div className="mt-3 flex items-center justify-between rounded-lg bg-emerald-900/40 px-3 py-2">
+          <span className="text-xs text-emerald-200">Full-res ready</span>
+          <button
+            onClick={() => downloadFullRes(p)}
+            className="rounded bg-emerald-700 px-3 py-1 text-sm text-emerald-50"
+          >
+            Download full-res ↓
+          </button>
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-3 gap-2">
         {isRaw ? (

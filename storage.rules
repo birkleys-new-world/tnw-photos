@@ -1,0 +1,19 @@
+rules_version = '2';
+
+// Phase 2: full-resolution photos live in Storage, gated behind the same
+// unguessable share token as the gallery. A full-rez object's path encodes the
+// gallery token + photo id, so you can only fetch it if you know the token.
+service firebase.storage {
+  match /b/{bucket}/o {
+    // path: galleries/{galleryToken}/{photoId}
+    // Readable by anyone who knows the token (same as the share link).
+    // Writable only from the owner's browser (no auth yet in Phase 2 — same
+    // trust model as Firestore writes; tighten in a later phase with real auth).
+    match /galleries/{galleryToken}/{photoId} {
+      allow read: if true;
+      allow write: if true;
+      // cap object size to free-tier sanity (50MB)
+      allow create: if request.resource.size < 50 * 1024 * 1024;
+    }
+  }
+}

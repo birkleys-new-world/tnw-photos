@@ -9,6 +9,9 @@ export interface Gallery {
   photoCount: number;
   // friend instructions shown on the swipe page
   mode: "raw" | "edited"; // raw: swipe up = send raw; edited: button = full rez
+  // Phase 2: which full-res have been uploaded & are "ready" for friends
+  ready: string[]; // photoIds with full-res in Storage
+  syncedAt: number; // last owner sync timestamp
 }
 
 export interface Photo {
