@@ -28,6 +28,8 @@ export default function OwnerPage() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [lightbox, setLightbox] = useState<number | null>(null);
+  const tStart = useRef<number | null>(null);
 
   useEffect(() => {
     if (!isConfigured()) {
@@ -43,6 +45,24 @@ export default function OwnerPage() {
       setReady(true);
     })().catch((e) => setError(String(e.message || e)));
   }, []);
+
+  // Lightbox keyboard nav
+  useEffect(() => {
+    if (lightbox === null) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setLightbox(null);
+      else if (e.key === "ArrowRight")
+        setLightbox((i) => (i === null ? null : (i + 1) % photos.length));
+      else if (e.key === "ArrowLeft")
+        setLightbox((i) => (i === null ? null : (i - 1 + photos.length) % photos.length));
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [lightbox, photos.length]);
+
+  function lbStep(delta: number) {
+    setLightbox((i) => (i === null ? null : (i + delta + photos.length) % photos.length));
+  }
 
   async function ingestFolder() {
     if (!fileRef.current) return;
@@ -214,10 +234,15 @@ export default function OwnerPage() {
           )}
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-            {photos.map((p) => (
+            {photos.map((p, idx) => (
               <div key={p.id} className="overflow-hidden rounded-lg bg-panel">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.thumbUrl} alt={p.name} className="aspect-square w-full object-cover" />
+                <img
+                  src={p.thumbUrl}
+                  alt={p.name}
+                  onClick={() => setLightbox(idx)}
+                  className="aspect-square w-full cursor-pointer object-cover"
+                />
                 <div className="p-2">
                   <div className="truncate text-xs text-neutral-400" title={p.name}>
                     {p.name}
@@ -252,6 +277,58 @@ export default function OwnerPage() {
           )}
         </div>
       </section>
+
+      {lightbox !== null && photos[lightbox] && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95"
+          onClick={() => setLightbox(null)}
+          onTouchStart={(e) => (tStart.current = e.touches[0].clientX)}
+          onTouchEnd={(e) => {
+            if (tStart.current === null) return;
+            const dx = e.changedTouches[0].clientX - tStart.current;
+            if (dx > 40) lbStep(-1);
+            else if (dx < -40) lbStep(1);
+            tStart.current = null;
+          }}
+        >
+          <div className="absolute left-4 top-4 text-xs text-neutral-500">
+            Esc to close · ←/→ keys · swipe on touch
+          </div>
+          <div className="absolute right-4 top-4 text-sm text-neutral-300">
+            {lightbox + 1} / {photos.length}
+          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={photos[lightbox].thumbUrl}
+            alt={photos[lightbox].name}
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-[88vh] max-w-[92vw] object-contain"
+          />
+          <div className="absolute bottom-6 flex items-center gap-6 text-neutral-200">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                lbStep(-1);
+              }}
+              className="rounded bg-neutral-800 px-4 py-2 text-sm"
+            >
+              ← Prev
+            </button>
+            <span className="max-w-[40vw] truncate text-sm text-neutral-400" title={photos[lightbox].name}>
+              {photos[lightbox].name}
+            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                lbStep(1);
+              }}
+              className="rounded bg-neutral-800 px-4 py-2 text-sm"
+            >
+              Next →
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
