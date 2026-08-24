@@ -16,6 +16,7 @@ import {
 import { uploadFullRes, deleteFullRes } from "@/lib/storage";
 import { isConfigured } from "@/lib/firebase";
 import type { Gallery, Photo, Vote } from "@/lib/types";
+import { APP_VERSION } from "@/lib/version";
 
 type Choice = "want_edit" | "pass" | "send_raw" | "want_full";
 
@@ -172,7 +173,12 @@ export default function SyncPage() {
   return (
     <main className="mx-auto max-w-3xl p-6">
       <header className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Sync · owner</h1>
+        <h1 className="text-2xl font-semibold flex items-center gap-2">
+          Sync · owner
+          <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-xs font-normal text-neutral-400">
+            v{APP_VERSION}
+          </span>
+        </h1>
         <button onClick={pickFolder} className="rounded bg-neutral-700 px-3 py-2 text-sm">
           Pick folder…
         </button>

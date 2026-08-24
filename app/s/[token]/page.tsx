@@ -15,6 +15,7 @@ import { isConfigured } from "@/lib/firebase";
 import { newGuestId } from "@/lib/thumb";
 import { fullResUrl } from "@/lib/storage";
 import type { Gallery, Photo } from "@/lib/types";
+import { APP_VERSION } from "@/lib/version";
 
 type Choice = "want_edit" | "pass" | "send_raw" | "want_full";
 
@@ -149,7 +150,7 @@ export default function SwipePage() {
   return (
     <main className="mx-auto flex min-h-screen max-w-md flex-col p-4">
       <div className="mb-2 flex items-center justify-between text-xs text-neutral-500">
-        <span>{gallery?.name}</span>
+        <span>v{APP_VERSION} · {gallery?.name}</span>
         <span>
           {idx + 1} / {photos.length}
         </span>

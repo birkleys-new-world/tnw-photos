@@ -16,6 +16,7 @@ import {
 import { isConfigured } from "@/lib/firebase";
 import { makeThumb, photoId, newToken, isPhoto } from "@/lib/thumb";
 import type { Gallery, Photo } from "@/lib/types";
+import { APP_VERSION } from "@/lib/version";
 
 // (photo-type detection now lives in lib/thumb.ts — isPhoto() handles 40+ formats incl. RAW)
 
@@ -141,7 +142,12 @@ export default function OwnerPage() {
   return (
     <main className="mx-auto max-w-5xl p-6">
       <header className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">TNW Photos</h1>
+        <h1 className="text-2xl font-semibold flex items-center gap-2">
+          TNW Photos
+          <span className="rounded bg-neutral-800 px-1.5 py-0.5 text-xs font-normal text-neutral-400">
+            v{APP_VERSION}
+          </span>
+        </h1>
         <span className="text-sm text-neutral-400">{galleries.length} galleries</span>
       </header>
 
