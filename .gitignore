@@ -9,3 +9,6 @@ out
 firebase-debug.log
 firestore-debug.log
 fb_access.txt
+
+.vercel
+.env*

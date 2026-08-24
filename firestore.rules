@@ -1,0 +1,34 @@
+rules_version = '2';
+
+// Phase 1: auth-free. The Web API key is public, so these rules rely on
+// structure, not identity. Tighten in Phase 2 once real auth lands.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Galleries + photos: world-readable (share links need it).
+    // Writes allowed from the owner's browser client. NOT safe against a
+    // determined attacker who knows the project — acceptable for a personal
+    // friends-only tool; revisit when Phase 2 adds real auth.
+    match /galleries/{galleryId} {
+      allow read: if true;
+      allow create, update, delete: if true;
+
+      match /photos/{photoId} {
+        allow read: if true;
+        allow create, update, delete: if true;
+      }
+    }
+
+    // Votes: anyone may create a vote, but they can only write their own
+    // guestId and may not tamper with existing votes from others.
+    match /votes/{voteId} {
+      allow read: if true;
+      allow create: if request.resource.data.guestId is string
+                    && request.resource.data.galleryId is string
+                    && request.resource.data.photoId is string
+                    && request.resource.data.choice in ['want_edit','pass','send_raw','want_full']
+                    && request.resource.data.ts is int;
+      allow update, delete: if false;
+    }
+  }
+}
