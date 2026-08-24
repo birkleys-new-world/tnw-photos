@@ -14,10 +14,10 @@ import {
   increment,
 } from "@/lib/firebase";
 import { isConfigured } from "@/lib/firebase";
-import { makeThumb, photoId, newToken } from "@/lib/thumb";
+import { makeThumb, photoId, newToken, isPhoto } from "@/lib/thumb";
 import type { Gallery, Photo } from "@/lib/types";
 
-const PHOTO_KINDS = ["image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif"];
+// (photo-type detection now lives in lib/thumb.ts — isPhoto() handles 40+ formats incl. RAW)
 
 export default function OwnerPage() {
   const [ready, setReady] = useState(false);
@@ -45,9 +45,7 @@ export default function OwnerPage() {
 
   async function ingestFolder() {
     if (!fileRef.current) return;
-    const files = Array.from(fileRef.current.files || []).filter(
-      (f) => PHOTO_KINDS.includes(f.type) || /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(f.name)
-    );
+    const files = Array.from(fileRef.current.files || []).filter((f) => isPhoto(f.name));
     if (!files.length) {
       setError("No image files found in that selection.");
       return;
